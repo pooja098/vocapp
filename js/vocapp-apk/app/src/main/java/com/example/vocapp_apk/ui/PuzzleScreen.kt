@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vocapp_apk.ui.theme.*
+import com.example.vocapp_apk.data.loadWordBank
 
 data class WordCard(
     val id: Int,
@@ -35,24 +37,23 @@ data class WordCard(
 
 @Composable
 fun PuzzleScreen() {
-    val initialWords = remember {
-        listOf(
-            WordCard(1, "excitement", 101),
-            WordCard(2, "hongo", 104),
-            WordCard(3, "cookbook", 102),
-            WordCard(4, "recetario", 102),
-            WordCard(5, "octopus", 103),
-            WordCard(6, "pulpo", 103),
-            WordCard(7, "mushroom", 104),
-            WordCard(8, "hacer enojar", 105),
-            WordCard(9, "make someone mad", 105),
-            WordCard(10, "emoción", 101)
-        ).shuffled()
+    val context = LocalContext.current
+    val initialWords = remember(context) {
+        val pairs = loadWordBank(context).shuffled().take(5)
+        val germanCards = pairs.mapIndexed { index, pair ->
+            WordCard(index * 2, pair.german, index)
+        }
+        val englishCards = pairs.mapIndexed { index, pair ->
+            WordCard(index * 2 + 1, pair.english, index)
+        }.shuffled()
+        germanCards.zip(englishCards).flatMap { (german, english) ->
+            listOf(german, english)
+        }
     }
 
     var selectedCards by remember { mutableStateOf(setOf<WordCard>()) }
     var matchedPairs by remember { mutableStateOf(setOf<Int>()) }
-    val progress = matchedPairs.size.toFloat() / 5f
+    val progress = matchedPairs.size.toFloat() / (initialWords.size / 2)
 
     LaunchedEffect(selectedCards) {
         if (selectedCards.size == 2) {
