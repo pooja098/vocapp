@@ -1,234 +1,132 @@
 package com.example.vocapp_apk.ui
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.vocapp_apk.ui.theme.*
-import com.example.vocapp_apk.data.loadWordBank
-
-data class WordCard(
-    val id: Int,
-    val text: String,
-    val pairId: Int
-)
+import androidx.compose.ui.window.DialogProperties
+import com.example.vocapp_apk.data.PuzzleGame
+import kotlinx.coroutines.delay
+import kotlin.math.ceil
 
 @Composable
-fun PuzzleScreen() {
-    val context = LocalContext.current
-    val initialWords = remember(context) {
-        val pairs = loadWordBank(context).shuffled().take(5)
-        val germanCards = pairs.mapIndexed { index, pair ->
-            WordCard(index * 2, pair.german, index)
+fun PuzzleScreen(game: PuzzleGame, onResult: () -> Unit, onHome: () -> Unit) {
+    var now by remember(game) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnHome by rememberUpdatedState(onHome)
+    // A run continues against a monotonic clock, including time spent in the background.
+    LaunchedEffect(game) {
+        while (game.result == null) {
+            now = SystemClock.elapsedRealtime()
+            game.tick(now)
+            if (game.result == null) delay(16)
         }
-        val englishCards = pairs.mapIndexed { index, pair ->
-            WordCard(index * 2 + 1, pair.english, index)
-        }.shuffled()
-        germanCards.zip(englishCards).flatMap { (german, english) ->
-            listOf(german, english)
-        }
+        currentOnResult()
+        delay(1000)
+        currentOnHome()
     }
-
-    var selectedCards by remember { mutableStateOf(setOf<WordCard>()) }
-    var matchedPairs by remember { mutableStateOf(setOf<Int>()) }
-    val progress = matchedPairs.size.toFloat() / (initialWords.size / 2)
-
-    LaunchedEffect(selectedCards) {
-        if (selectedCards.size == 2) {
-            val list = selectedCards.toList()
-            if (list[0].pairId == list[1].pairId) {
-                matchedPairs = matchedPairs + list[0].pairId
-                selectedCards = emptySet()
-            } else {
-                delay(1000)
-                selectedCards = emptySet()
-            }
+    BackHandler { /* Finish the active run before returning home. */ }
+    val focusManager = LocalFocusManager.current
+    val result = game.result
+    Column(Modifier.fillMaxSize().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LinearProgressIndicator(
+                progress = { game.remainingMs(now).toFloat() / game.durationMs },
+                modifier = Modifier.weight(1f).height(12.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text("${ceil(game.remainingMs(now) / 1000.0).toInt()} s")
         }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(PuzzleBackground)
-            .padding(16.dp)
-            .statusBarsPadding()
-    ) {
-        // Top Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = Color.Gray.copy(alpha = 0.6f),
-                modifier = Modifier.size(36.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            SegmentedProgressBar(
-                progress = progress,
-                modifier = Modifier
-                    .weight(1.0f)
-                    .height(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "10",
-                color = Color.Gray,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+        Text("${game.matched} / ${game.settings.words} words", style = MaterialTheme.typography.titleLarge)
+        Text(if (game.writing) "Write the German word, then tap another cell" else "Tap the matching pairs")
+        Row(Modifier.fillMaxWidth()) {
+            Text("German", Modifier.weight(1f))
+            Text("English", Modifier.weight(1f))
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            text = "Tap the matching pairs",
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(initialWords) { word ->
-                val isSelected = selectedCards.contains(word)
-                val isMatched = matchedPairs.contains(word.pairId)
-
-                PuzzleCard(
-                    word = word,
-                    isSelected = isSelected,
-                    isMatched = isMatched,
-                    onClick = {
-                        if (!isMatched && selectedCards.size < 2 && !selectedCards.contains(word)) {
-                            selectedCards = selectedCards + word
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val rowHeight = ((maxHeight - 8.dp * (game.left.size - 1)) / game.left.size)
+                .coerceIn(48.dp, 100.dp)
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(game.left.indices.toList()) { index ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        listOf(true, false).forEach { isLeft ->
+                            val card = (if (isLeft) game.left else game.right)[index]
+                            val selected = (if (isLeft) game.selectedLeft else game.selectedRight) == index
+                            if (card == null) {
+                                Spacer(Modifier.weight(1f).height(rowHeight))
+                            } else if (game.writing && isLeft) {
+                                key(card.pairId) {
+                                    var wasFocused by remember { mutableStateOf(false) }
+                                    OutlinedTextField(
+                                        value = game.answers[card.pairId].orEmpty(),
+                                        onValueChange = { game.editAnswer(card.pairId, it) },
+                                        enabled = result == null,
+                                        singleLine = true,
+                                        isError = game.incorrect[card.pairId] == true,
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            errorBorderColor = Color(0xFFE6A0A0),
+                                            errorCursorColor = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                        modifier = Modifier.weight(1f).height(rowHeight).onFocusChanged {
+                                            if (wasFocused && !it.isFocused) {
+                                                game.submitAnswer(card.pairId, SystemClock.elapsedRealtime())
+                                            }
+                                            wasFocused = it.isFocused
+                                        }
+                                    )
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = {
+                                        now = SystemClock.elapsedRealtime()
+                                        if (game.writing) focusManager.clearFocus()
+                                        else game.select(isLeft, index, now)
+                                    },
+                                    enabled = result == null,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(
+                                        width = if (selected) 3.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.outline
+                                    ),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surface
+                                    ),
+                                    contentPadding = PaddingValues(4.dp),
+                                    modifier = Modifier.weight(1f).height(rowHeight)
+                                ) { Text(card.text) }
+                            }
                         }
                     }
-                )
+                }
             }
         }
     }
-}
-
-@Composable
-fun SegmentedProgressBar(
-    progress: Float,
-    modifier: Modifier = Modifier,
-    segments: Int = 4
-) {
-    Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
-        val centerY = height / 2
-
-        // Background line
-        drawLine(
-            color = PuzzleProgressBackground,
-            start = Offset(0f, centerY),
-            end = Offset(width, centerY),
-            strokeWidth = height,
-            cap = StrokeCap.Round
+    if (result != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(if (result.matched == game.settings.words) "You win!" else "You lose!") },
+            text = { Text("${result.matched} / ${game.settings.words} words matched") },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
         )
-
-        // Progress line
-        if (progress > 0) {
-            drawLine(
-                color = PuzzleProgressPrimary,
-                start = Offset(0f, centerY),
-                end = Offset(width * progress, centerY),
-                strokeWidth = height,
-                cap = StrokeCap.Round
-            )
-        }
-
-        // Dots
-        for (i in 0..segments) {
-            val x = (width / segments) * i
-            val isFilled = x <= width * progress
-            drawCircle(
-                color = if (isFilled) PuzzleProgressPrimary else PuzzleProgressBackground,
-                radius = height / 3,
-                center = Offset(x, centerY)
-            )
-            // Add a border to the dot to make it stand out
-            drawCircle(
-                color = PuzzleBackground,
-                radius = height / 3,
-                center = Offset(x, centerY),
-                style = Stroke(width = 2.dp.toPx())
-            )
-        }
-    }
-}
-
-@Composable
-fun PuzzleCard(
-    word: WordCard,
-    isSelected: Boolean,
-    isMatched: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor = when {
-        isMatched -> Color.Transparent
-        isSelected -> PuzzleProgressPrimary
-        else -> PuzzleCardBorder
-    }
-    
-    val backgroundColor = if (isMatched) Color.Transparent else PuzzleCardBackground
-    val textColor = if (isMatched) Color.Gray else Color.White
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp)
-            .background(backgroundColor, RoundedCornerShape(12.dp))
-            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable(enabled = !isMatched) { onClick() }
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = word.text,
-            color = textColor,
-            fontSize = 18.sp,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PuzzleScreenPreview() {
-    VocappapkTheme(darkTheme = true) {
-        PuzzleScreen()
     }
 }
