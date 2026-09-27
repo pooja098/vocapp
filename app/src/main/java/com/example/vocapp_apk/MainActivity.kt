@@ -62,14 +62,14 @@ fun MainActivityScreen(state: AppState) {
                 "puzzle" -> state.game?.let { game ->
                     PuzzleScreen(game, state::recordResult) { state.page = "home" }
                 }
-                else -> HomeScreen(state.performances, { state.start() }, { state.start(writing = true) }, state.wordLists.words.isNotEmpty())
+                else -> HomeScreen(state.matchPerformances, state.writePerformances, { state.start() }, { state.start(writing = true) }, state.wordLists.words.isNotEmpty())
             }
         }
     }
 }
 
 @Composable
-fun HomeScreen(performances: List<Performance>, onStart: () -> Unit, onWrite: () -> Unit, hasWords: Boolean) {
+fun HomeScreen(matchPerformances: List<Performance>, writePerformances: List<Performance>, onStart: () -> Unit, onWrite: () -> Unit, hasWords: Boolean) {
     BoxWithConstraints(Modifier.fillMaxSize().padding(20.dp)) {
         val availableHeight = maxHeight
         Column(
@@ -85,24 +85,30 @@ fun HomeScreen(performances: List<Performance>, onStart: () -> Unit, onWrite: ()
                 Modifier.fillMaxWidth().padding(top = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Top 5 performances", style = MaterialTheme.typography.headlineSmall)
-                Text("Ranked by words matched ÷ seconds taken")
-                Row(Modifier.fillMaxWidth()) {
-                    Text("Rank", Modifier.weight(1f))
-                    Text("Words", Modifier.weight(1f))
-                    Text("Time", Modifier.weight(1f))
-                    Text("Words/s", Modifier.weight(1f))
-                }
-                HorizontalDivider()
-                if (performances.isEmpty()) Text("Complete a puzzle to record your first performance.")
-                performances.forEachIndexed { index, result ->
-                    Row(Modifier.fillMaxWidth()) {
-                        Text("${index + 1}", Modifier.weight(1f))
-                        Text("${result.matched}", Modifier.weight(1f))
-                        Text(String.format(Locale.getDefault(), "%.2f s", result.seconds), Modifier.weight(1f))
-                        Text(String.format(Locale.getDefault(), "%.2f", result.score), Modifier.weight(1f))
-                    }
-                }
+                Text("Top 5 wins · ranked by words per second", style = MaterialTheme.typography.bodySmall)
+                PerformanceTable("Match", matchPerformances)
+                PerformanceTable("Write", writePerformances)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PerformanceTable(title: String, performances: List<Performance>) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Row(Modifier.fillMaxWidth()) {
+            Text("Words", Modifier.weight(1f))
+            Text("Time", Modifier.weight(1f))
+            Text("Words/s", Modifier.weight(1f))
+        }
+        HorizontalDivider()
+        if (performances.isEmpty()) Text("Win a puzzle to record your first performance.")
+        performances.forEach { result ->
+            Row(Modifier.fillMaxWidth()) {
+                Text("${result.matched}", Modifier.weight(1f))
+                Text(String.format(Locale.getDefault(), "%.2f s", result.seconds), Modifier.weight(1f))
+                Text(String.format(Locale.getDefault(), "%.2f", result.score), Modifier.weight(1f))
             }
         }
     }
@@ -126,19 +132,28 @@ fun SettingsScreen(
     val save by rememberUpdatedState(onSave)
     DisposableEffect(Unit) { onDispose { save(latestWrite, latestMatch) } }
     BackHandler(onBack = onBack)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+    Column(Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
-        Text("Words", style = MaterialTheme.typography.titleLarge)
-        NumericSetting("words", writeWords) { writeWords = it }
-        NumericSetting("timer", writeTimer) { writeTimer = it }
-        NumericSetting("page-size", writePageSize) { writePageSize = it }
-        HorizontalDivider()
-        Text("Match", style = MaterialTheme.typography.titleLarge)
-        NumericSetting("words", matchWords) { matchWords = it }
-        NumericSetting("timer", matchTimer) { matchTimer = it }
-        NumericSetting("page-size", matchPageSize) { matchPageSize = it }
-        Text("Timers are measured in seconds. Changes are saved when you leave settings and apply to new puzzles.")
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Settings", style = MaterialTheme.typography.headlineMedium)
+            Text("Write", style = MaterialTheme.typography.titleLarge)
+            NumericSetting("words", writeWords) { writeWords = it }
+            NumericSetting("timer (seconds)", writeTimer) { writeTimer = it }
+            NumericSetting("page-size", writePageSize) { writePageSize = it }
+            HorizontalDivider()
+            Text("Match", style = MaterialTheme.typography.titleLarge)
+            NumericSetting("words", matchWords) { matchWords = it }
+            NumericSetting("timer (seconds)", matchTimer) { matchTimer = it }
+            NumericSetting("page-size", matchPageSize) { matchPageSize = it }
+        }
+        Text(
+            "Changes are auto saved upon exit.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "vocapp-apk"
+rootProject.name = "vocapp"
 include(":app")
  

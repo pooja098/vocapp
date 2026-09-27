@@ -128,6 +128,26 @@ class PuzzleGameTest {
         assertTrue(game.right.all { it == null })
     }
 
+    @Test fun writingRefillsImmediatelyThenStopsAtLoadedTarget() {
+        val game = PuzzleGame(PuzzleSettings(3, 5, 2),
+            List(5) { WordPair("German $it", "English $it") }, 1000L, writing = true)
+        val original = game.left[0]!!
+        val untouched = game.left[1]
+        game.editAnswer(original.pairId, original.text)
+        game.submitAnswer(original.pairId, 1100L)
+        val replacement = game.left[0]!!
+        assertNotEquals(original.text, replacement.text)
+        assertEquals(untouched, game.left[1])
+        assertEquals(replacement.pairId, game.right[0]!!.pairId)
+        assertNull(game.answers[replacement.pairId])
+        game.editAnswer(replacement.pairId, replacement.text)
+        game.submitAnswer(replacement.pairId, 1200L)
+        assertNull(game.left[0])
+        assertNull(game.right[0])
+        assertEquals(2, game.matched)
+        assertNull(game.result)
+    }
+
     @Test fun writingCannotScoreAfterDeadline() {
         val game = PuzzleGame(PuzzleSettings(1, 5, 1), bank, 1000L, writing = true)
         val card = game.left[0]!!

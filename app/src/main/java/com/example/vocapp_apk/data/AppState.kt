@@ -20,7 +20,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         preferences.getInt("$mode.timer", preferences.getInt("timer", 5)).coerceAtLeast(1),
         preferences.getInt("$mode.page-size", preferences.getInt("page-size", 7)).coerceAtLeast(1)
     )
-    var performances by mutableStateOf(loadPerformances())
+    var matchPerformances by mutableStateOf(loadPerformances("match"))
+        private set
+    var writePerformances by mutableStateOf(loadPerformances("write"))
         private set
     var game by mutableStateOf<PuzzleGame?>(null)
         private set
@@ -81,20 +83,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     fun recordResult() {
-        val result = game?.result ?: return
+        val run = game ?: return
+        val result = run.result ?: return
         if (recorded) return
         recorded = true
-        performances = (performances + result).sortedWith(
+        if (result.matched != run.settings.words) return
+        val previous = if (run.writing) writePerformances else matchPerformances
+        val performances = (previous + result).sortedWith(
             compareByDescending<Performance> { it.score }.thenByDescending { it.matched }
                 .thenBy { it.seconds }
         ).take(5)
+        if (run.writing) writePerformances = performances else matchPerformances = performances
+        val mode = if (run.writing) "write" else "match"
         val rows = JSONArray()
         performances.forEach { rows.put(JSONArray().put(it.matched).put(it.seconds)) }
-        preferences.edit().putString("performances", rows.toString()).apply()
+        preferences.edit().putString("$mode.wins", rows.toString()).apply()
     }
 
-    private fun loadPerformances(): List<Performance> = runCatching {
-        val rows = JSONArray(preferences.getString("performances", "[]"))
+    private fun loadPerformances(mode: String): List<Performance> = runCatching {
+        val rows = JSONArray(preferences.getString("$mode.wins", "[]"))
         List(rows.length()) { index ->
             val row = rows.getJSONArray(index)
             Performance(row.getInt(0), row.getDouble(1))

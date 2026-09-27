@@ -109,20 +109,17 @@ class PuzzleGame(
             return
         }
         matched++
-        left[index] = null
-        right[index] = null
         answers.remove(pairId)
         incorrect.remove(pairId)
-        if (matched == settings.words) {
-            finish(now)
-        } else if (left.all { it == null }) {
-            // Keep solved rows empty until the next page is needed.
-            repeat(minOf(left.size, settings.words - nextId)) { row ->
-                val pair = nextPair()
-                left[row] = GameCard(nextId, pair.german)
-                right[row] = GameCard(nextId++, pair.english)
-            }
+        if (nextId < settings.words) {
+            val pair = nextPair()
+            left[index] = GameCard(nextId, pair.german)
+            right[index] = GameCard(nextId++, pair.english)
+        } else {
+            left[index] = null
+            right[index] = null
         }
+        if (matched == settings.words) finish(now)
     }
 
     private fun finish(now: Long) {
